@@ -1,0 +1,6 @@
+REFERENCES:
+[1] Sklearn packet documentation:  http://scikit-learn.org/stable/index.html
+[2] Stackoverflow: http://stackoverflow.com/
+[3] Learning python animal book from O'Reilly
+[4] http://machinelearningmastery.com/
+[5]  udacity data analyst nanodegree forum
