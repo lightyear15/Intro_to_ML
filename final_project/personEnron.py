@@ -1,5 +1,5 @@
+import numpy
 import os
-import numpy as np
 import sys
 sys.path.append( "../tools/" )
 from parse_out_email_text import parseOutText 
@@ -21,7 +21,9 @@ class EnronEmployee(object):
     
     def getEmail(self):
         self.email_ = self.dframe_["email_address"].loc[self.dframe_["full_name"] == self.name_].iloc[0]
-        return self.email_ is not ""
+        if type(self.email_) is not str and numpy.isnan(self.email_):
+            return False
+        return self.email_ is not "" 
     
     def checkIfPoi(self):
         self.isPoi_ = self.dframe_["poi"].loc[self.dframe_["full_name"] == self.name_].iloc[0]
@@ -62,7 +64,7 @@ class EnronEmployee(object):
         tmp = []
         if self.fromList_ is not "":
             if self.sentMailCount_ > limit_from:
-                sentMailIdx = np.random.choice(self.sentMailCount_, limit_from)
+                sentMailIdx = numpy.random.choice(self.sentMailCount_, limit_from)
             else:
                 sentMailIdx = range(0, self.sentMailCount_)
             midx = 0
@@ -81,7 +83,7 @@ class EnronEmployee(object):
         tmp = []      
         if self.toList_ is not "":
             if self.recvdMailCount_ > limit_to:
-                recvdMailIdx = np.random.choice(self.recvdMailCount_, limit_to)
+                recvdMailIdx = numpy.random.choice(self.recvdMailCount_, limit_to)
             else:
                 recvdMailIdx = range(0, self.recvdMailCount_)
             midx = 0

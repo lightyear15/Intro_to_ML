@@ -23,6 +23,8 @@ sys.path.append("../tools/")
 from feature_format import featureFormat, targetFeatureSplit
 from tester import test_classifier, dump_classifier_and_data
 
+
+
 ### Task 1: Select what features you'll use.
 ### features_list is a list of strings, each of which is a feature name.
 ### The first feature must be "poi".
@@ -35,294 +37,117 @@ del data_dict["THE TRAVEL AGENCY IN THE PARK"]
 del data_dict["TOTAL"]
 
 # moving to pandas dataframe
-data_frame = pd.DataFrame(index=data_dict.keys(), columns=data_dict["METTS MARK"].keys())
-for name in data_dict.keys():
-    data_frame.loc[name] = pd.Series(data_dict[name])
+data_frame = dict2PDFrame(data_dict, data_dict["METTS MARK"].keys())
+pickle.dump( data_frame, open("data_frame1.pkl", "w") )
 
-# replacing NaN values    
-data_frame.replace("NaN", np.nan, inplace=True)
-data_frame["email_address"].replace(np.nan, "", inplace=True)
-data_frame.index.name = "full_name"
-data_frame = data_frame.reset_index()
 
 # removing those entries which have very few values
-thre = 0.30
-person_classes = { "lessthre":0, "less2thre": 0, "less3thre": 0, "more3thre":0}
-for person_index in data_frame.index:
-    person = data_frame.iloc[person_index]    
-    ratio = float(person.count()) / float(len(person))
-    #print person["full_name"] + " ratio: " + str(ratio)
-    if ratio < thre:
-        person_classes["lessthre"] += 1
-    elif ratio < 2*thre:
-        person_classes["less2thre"] += 1
-    elif ratio < 3*thre:
-        person_classes["less3thre"] += 1
-    else:
-        person_classes["more3thre"] += 1
-
-print "employees count: "
-print person_classes
-
-toRemove = []
-for person_index in data_frame.index:    
-    person = data_frame.iloc[person_index]    
-    ratio = float(person.count()) / float(len(person))
-    if ratio < thre:
-        toRemove.append(person_index)
-        print "removing " + person["full_name"]
-    
-data_frame.drop(toRemove, axis= 0, inplace = True)
-        
-feature_classes = { "lessthre":0, "less2thre": 0, "less3thre": 0, "more3thre":0}
-for feature in data_frame.columns:    
-    ratio = float(data_frame[feature].count()) / float(len(data_frame[feature]))    
-    if ratio < thre:
-        feature_classes["lessthre"] += 1
-    elif ratio < 2*thre:
-        feature_classes["less2thre"] += 1
-    elif ratio < 3*thre:
-        feature_classes["less3thre"] += 1
-    else:
-        feature_classes["more3thre"] += 1
-print "features count"
-print feature_classes
-
-toRemove = []
-for feature in data_frame.columns:    
-    ratio = float(data_frame[feature].count()) / float(len(data_frame[feature]))
-    if ratio < thre:
-        toRemove.append(feature)
-        print "removing " + feature
-    
-data_frame.drop(toRemove, axis= 1, inplace = True)
+data_frame = pickle.load( open("data_frame1.pkl", "r"))
+classifyEntries(data_frame, .25)
+data_frame = removeClassEntries(data_frame, .25)
+classifyFeatures(data_frame, .25)
+data_frame = removeClassFeatures(data_frame, .25)
+pickle.dump(data_frame, open("data_frame2.pkl", "w"))
 
 
-
-### Task 2: Remove outliers
-# remove outliers from finance data
+### Task 2: outliers analysis
+data_frame = pickle.load( open("data_frame2.pkl", "r"))
 finance_feature = ["salary", "bonus", "total_stock_value", "expenses", 
                    "exercised_stock_options", "other", "restricted_stock"]
 finance_base_feature = "total_payments"
-outlier_list = {}
-
-from sklearn import linear_model
-from scipy import stats
-
-
-for f in finance_feature:
-    tmp_frame = data_frame.loc[~((data_frame[finance_base_feature].isnull()) | (data_frame[f].isnull()))]
-    tmp_frame.reset_index(inplace=True)
-    X = np.reshape( np.array(tmp_frame[finance_base_feature]), (len(tmp_frame[finance_base_feature]), 1))
-    Y = np.reshape( np.array(tmp_frame[f]), (len(tmp_frame[f]), 1))
-    reg = linear_model.LinearRegression()
-    reg.fit (X, Y)
-    pred = reg.predict(X)
-    error = abs(pred - Y)
-    threshold = stats.scoreatpercentile(error, 90)
-    for i in range(0,len(error)):
-        if error[i] > threshold:
-            name = tmp_frame["full_name"].loc[i]
-            if name in outlier_list.keys():
-                outlier_list[name] += 1
-            else:
-                outlier_list[name] = 1            
-for i in range(0, len(finance_feature)+1):
-    cc = sum(np.array(outlier_list.values()) == i)
-    print "outliers on " + str(i) + " features: " + str(cc)
-print "total outliers: " + str(len(outlier_list.keys()))
-
-for name in outlier_list.keys():
-    if outlier_list[name] >= 4:
-        print "removing: " + name
-        data_frame = data_frame.loc[data_frame["full_name"] != name]
-
-# removing outliers from email data
+findOutliers(data_frame, finance_base_feature, finance_feature)
+changeOutliersValues(data_frame, finance_base_feature, finance_feature)
 email_feature_list = (("from_messages", ["from_this_person_to_poi"]), 
                      (("to_messages"), ["from_poi_to_this_person", "shared_receipt_with_poi"]))
-outlier_list = {}
 for feature_set in email_feature_list:
-    base_f = feature_set[0]
-    for f in feature_set[1]:        
-        tmp_frame = data_frame.loc[~((data_frame[base_f].isnull()) | (data_frame[f].isnull()))]
-        tmp_frame.reset_index(inplace=True)
-        X = np.reshape( np.array(tmp_frame[base_f]), (len(tmp_frame[base_f]), 1))
-        Y = np.reshape( np.array(tmp_frame[f]), (len(tmp_frame[f]), 1))
-        reg = linear_model.LinearRegression()
-        reg.fit (X, Y)
-        pred = reg.predict(X)
-        error = abs(pred - Y)
-        threshold = stats.scoreatpercentile(error, 90)
-        for i in range(0,len(error)):
-            if error[i] > threshold:
-                name = tmp_frame["full_name"].loc[i]
-                if name in outlier_list.keys():
-                    outlier_list[name] += 1
-                else:
-                    outlier_list[name] = 1            
-for i in range(0, 4):
-    cc = sum(np.array(outlier_list.values()) == i)        
-    print "outliers on " + str(i) + " features: " + str(cc)
-print "total outliers: " + str(len(outlier_list.keys()))
-print "total dataset length: " + str(len(data_frame))
+    findOutliers(data_frame, feature_set[0], feature_set[1])
+    
+for feature_set in email_feature_list:
+    changeOutliersValues(data_frame, finance_base_feature, finance_feature)
 
-for name in outlier_list.keys():
-    if outlier_list[name] >= 2:
-        print "removing: " + name
-        data_frame = data_frame.loc[data_frame["full_name"] != name]
-print "final dataset length: " + str(len(data_frame))
-
-print "after outlier removal"
-print "non-pois people count: " + str(data_frame["poi"].loc[data_frame["poi"]==False].count())
-print "pois people count: " + str(data_frame["poi"].loc[data_frame["poi"]==True].count())
-print "\n\n"
+pickle.dump(data_frame, open("data_frame3.pkl", "w"))
 
 
 # feature selection by decision tree
-df = data_frame.fillna(0.0)
-df.drop(["full_name", "poi", "email_address"], axis=1, inplace=True)
-X = np.array(df.values)
-Y = np.array(data_frame["poi"].values)
-dt = ensemble.ExtraTreesClassifier(min_samples_split=10)
-dt.fit(X, Y)
-d = dict(zip(df.columns.values, dt.feature_importances_))
-feature_toRemove = []
-for feature in d.keys():
-    print feature + " importance: " + str(d[feature])
-    if d[feature] < 0.01:
-        feature_toRemove.append(feature)
-print "feature to remove " + str(feature_toRemove)
-data_frame.drop(feature_toRemove, axis=1, inplace=True)
+FEATURE_SELECTION_PROCESS = False
+data_frame = pickle.load( open("data_frame3.pkl", "r"))
+if FEATURE_SELECTION_PROCESS:
+    features_dict = removingFeaturePerformances(data_frame)
+    print features_dict
+    pickle.dump(features_dict, open("feature_selection.pkl", "w"))
+features_dict = pickle.load( open("feature_selection.pkl", "r"))
+blw, abv = PercentileBestFeature(features_dict, 90) 
 
-
-
+REMOVE_FEATURES = abv    
+data_frame = data_frame.drop(REMOVE_FEATURES, axis=1)
+    
+pickle.dump(data_frame, open("data_frame4.pkl", "w"))
 
 
 ### Task 3: Create new feature(s)
-# create new feature from finance data
-FEATURE_THRESHOLD = 0.1
-important_feature = []
+FEATURE_CREATION_PROCESS = False
+data_frame = pickle.load( open("data_frame4.pkl", "r"))
+if FEATURE_CREATION_PROCESS:
+    features_dict = AddArtificialFeaturePerformance(data_frame)
+    print features_dict
+    pickle.dump(features_dict, open("feature_addition.pkl", "w"))
 
-for feature in d.keys():
-    if d[feature] > FEATURE_THRESHOLD:
-        important_feature.append(feature)
-for i in range(0, len(important_feature)):
-    ifeature = important_feature[i]
-    en_feature = ifeature + str("^2")
-    data_frame[en_feature] = data_frame[ifeature] **2;    
-    en_feature = "log_" + ifeature
-    data_frame[en_feature] = data_frame[ifeature].apply(np.log);
-    for j in range(i+1, len(important_feature)):
-        jfeature = important_feature[j]
-        en_feature = ifeature + "*" + jfeature
-        data_frame[en_feature] = data_frame[ifeature] * data_frame[jfeature];
+features_dict = pickle.load( open("feature_addition.pkl", "r"))
+blw, abv = PercentileBestFeature(features_dict, 90) 
+print blw
+print abv
 
-df = data_frame.fillna(0.0)
-df.drop(["full_name", "poi", "email_address"], axis=1, inplace=True)
-X = np.array(df.values)
-Y = np.array(data_frame["poi"].values)
-dt = ensemble.ExtraTreesClassifier(min_samples_split=10)
-dt.fit(X, Y)
-d = dict(zip(df.columns.values, dt.feature_importances_))
-feature_toRemove = []
-for feature in d.keys():
-    print feature + " importance: " + str(d[feature])
-    if d[feature] < 0.01:
-        feature_toRemove.append(feature)
-print "feature to remove " + str(feature_toRemove)
-data_frame.drop(feature_toRemove, axis=1, inplace=True)
+IMPORTANT_FEATURE = abv
+data_frame = addArtificialToBestFeatures(data_frame, IMPORTANT_FEATURE)
+pickle.dump(data_frame, open("data_frame5.pkl", "w"))
 
 
-# analyzing mails this step may take long time
+# analysis of emails
+data_frame = pickle.load( open("data_frame5.pkl", "r"))
 
-ATTEMPTS = 50
-PERSON_SUBSET = 20
-MAIL_PER_PERSON = 200
-important_word_dict = {}
-poi_ratio = float(data_frame["poi"].loc[data_frame["poi"]==True].count()) / float(data_frame["poi"].count())
+MAKE_MAIL_ANALYSIS = False
+MAKE_EMPLOYEE_MAIL_ANALYSIS = False
+if MAKE_MAIL_ANALYSIS:
+    tmpWords = findBestDictionary(data_frame)
+    importantWords = findBestTenWords(tmpWords)
+    pickle.dump(importantWords, open("importantWords.pkl", "w"))
+importantWords = pickle.load( open("importantWords.pkl", "r"))
 
-for i in range(0,ATTEMPTS):
-    if i % 10 == 0:
-        print "attempt " + str(i)
-    poi_person = data_frame.loc[data_frame["poi"]==True]    
-    rnd_poi_person = poi_person.loc[np.random.choice(poi_person.index, int(round(poi_ratio*PERSON_SUBSET)))]
-    nonpoi_person = data_frame.loc[data_frame["poi"]==False]    
-    rnd_nonpoi_person = nonpoi_person.loc[np.random.choice(nonpoi_person.index, int(round((1-poi_ratio)*PERSON_SUBSET)))]
-    sub_d_frame = pd.concat([rnd_poi_person, rnd_nonpoi_person])
-    sub_d_frame.reset_index(inplace = True)
+if MAKE_EMPLOYEE_MAIL_ANALYSIS:
+    dict_mail_data = retrieveEmployeeMailDict(data_frame, importantWords)
+    pickle.dump(dict_mail_data, open("dict_mail_data.pkl", "w"))
+dict_mail_data = pickle.load( open("dict_mail_data.pkl", "r"))
+mailDFrame = mailDict2Frame(dict_mail_data)
+
+mail_DFrame = removeWords(mailDFrame)
+data_frame = data_frame.reset_index()
+data_frame = data_frame.merge(mail_DFrame, how='outer', on="full_name")
+
+data_frame.drop("index", axis=1, inplace=True)
+pickle.dump(data_frame, open("data_frame6.pkl", "w"))
     
-    email_list = []
-    poi_labels = []
-    for name in sub_d_frame["full_name"].values:
-        person = EnronEmployee(name, sub_d_frame)
-        tmp1, tmp2 = person.analyzeMails(MAIL_PER_PERSON/2, MAIL_PER_PERSON/2)
-        email_list += tmp1
-        poi_labels += tmp2
-    vectorizer = TfidfVectorizer(sublinear_tf=True, max_df=0.25, stop_words="english")
-    features_train = vectorizer.fit_transform (email_list)
-    dt = ensemble.ExtraTreesClassifier()
-    dt.fit(features_train.toarray(), poi_labels)
-  
-    importances = dt.feature_importances_
-    indices = np.argsort(importances)[::-1]    
-    sumw = 0
-    idx = 0
 
-    while sumw < 0.9 and idx < 1000:
-        word = vectorizer.get_feature_names()[indices[i]]
-        score = importances[indices[i]]
-        
-        if word in important_word_dict:
-            important_word_dict[word] += score / ATTEMPTS
-        else:
-            important_word_dict[word] = score / ATTEMPTS
-        sumw += importances[indices[i]]
-        idx += 1
+# analyze new artificial features
+ARTIICIAL_FEATURE_SELECTION_PROCESS = False
+data_frame = pickle.load( open("data_frame6.pkl", "r"))
+if ARTIICIAL_FEATURE_SELECTION_PROCESS:
+    features_dict = removingFeaturePerformances(data_frame)
+    print features_dict
+    pickle.dump(features_dict, open("artificial_feature_selection.pkl", "w"))
+features_dict = pickle.load( open("artificial_feature_selection.pkl", "r"))
+blw, abv = PercentileBestFeature(features_dict, 90) 
 
-print important_word_dict
+REMOVE_FEATURES = abv
+print REMOVE_FEATURES
 
-# computing the tfidf factor for the top 10 important words
-#warning this may take very long time
-import operator
-import pickle
-
-important_word_dict = pickle.load( open("important_word_pickle.pkl", "r"))
-data_frame = pickle.load( open("data_frame_1.pkl", "r") )
-
-sorted_wlist = sorted(important_word_dict.items(), key=operator.itemgetter(1), reverse=True)
-vocabulary = {}
-for i in range(0,10):
-    k = sorted_wlist[i]    
-    vocabulary[k[0]] = i
-    data_frame[k[0]] = 0.0
-
-for entry in range(0,len(data_frame)):
-    person = EnronEmployee(data_frame["full_name"].iloc[entry], data_frame)
-    mails = person.vectorizeMails(vocabulary)
-    vect_words = person.vectorizeMails(vocabulary)
-    for word in vect_words.keys():
-        data_frame[word].loc[entry] = vect_words[word]
-
-
-# analyzing the added features
-df = data_frame.fillna(0.0)
-df.drop(["full_name", "poi", "email_address"], axis=1, inplace=True)
-X = np.array(df.values)
-Y = np.array(data_frame["poi"].values)
-dt = ensemble.ExtraTreesClassifier(min_samples_split=10)
-dt.fit(X, Y)
-d = dict(zip(df.columns.values, dt.feature_importances_))
-feature_toRemove = []
-for feature in d.keys():
-    print feature + " importance: " + str(d[feature])
-    if d[feature] < 0.01:
-        feature_toRemove.append(feature)
-print "feature to remove " + str(feature_toRemove)
-data_frame.drop(feature_toRemove, axis=1, inplace=True)
+data_frame = data_frame.drop(REMOVE_FEATURES, axis=1)    
+pickle.dump(data_frame, open("data_frame7.pkl", "w"))
 
 
 
 ### Store to my_dataset for easy export below.
+data_frame = pickle.load( open("data_frame7.pkl", "r"))
+data_frame = removeNans(data_frame)
 my_dataset = pdFrame2Dict(data_frame)
 pickle.dump(my_dataset, open("my_dataset.pkl", "w") )
 
@@ -332,83 +157,94 @@ tmp.remove("email_address")
 tmp.remove("poi")
 feature_list = ["poi"]
 feature_list += tmp
+print feature_list
 pickle.dump(feature_list, open("my_feature_list.pkl", "w") )
-
 
 
 ### Extract features and labels from dataset for local testing
 matrix  = featureFormat(my_dataset, feature_list);
 labels, features = targetFeatureSplit(matrix)
-features_train, features_test, labels_train, labels_test = \
-cross_validation.train_test_split(features, labels)
+features_train, features_test, labels_train, labels_test = cross_validation.train_test_split(features, labels)
 
 ### Task 4: Try a varity of classifiers
 
+GRIDSEARCH_ENABLE = False
 
-
-pca_params = {"pca__n_components" : [10, 12, 15, 17]}
-tree_params = {"tree__min_samples_split" : [2, 3, 5, 7, 10]}
-rndft_params = {"rndft__n_estimators" : [2, 3, 5, 7, 15, 20, 50]}
-svc_params = {"svc__C" : [0.5, 1, 5, 10, 100]}
-adabst_params = {"adabst__n_estimators" : [5, 10, 15, 20, 50]}
-
-
-tmpclf = Pipeline([ ("pca", PCA()), ("tree", tree.DecisionTreeClassifier())])
-tmp = pca_params.copy()
-tmp.update(tree_params)
-res = GridSearchCV(tmpclf, tmp, scoring="f1")
-print "decisionTree result"
-res.fit(features_train, labels_train)
-res.score(features_test, labels_test)
-print res.best_score_
-BEST_SCORE = res.best_score_
-clf = Pipeline([ ("pca", PCA(res.best_params_["pca__n_components"])), 
-                ("tree", tree.DecisionTreeClassifier(res.best_params_["tree__min_samples_split"]))])
-#test_classifier(res, my_dataset,feature_list)
-
-clf = Pipeline([("pca", PCA()), 
-                ("rndft", ensemble.RandomForestClassifier())])
-tmp = pca_params.copy()
-tmp.update(rndft_params)
-res = GridSearchCV(clf, tmp, scoring="f1")
-print "Random forest result"
-res.fit(features_train, labels_train)
-res.score(features_test, labels_test)
-print res.best_score_
-if BEST_SCORE < res.best_score_:
-    clf = Pipeline([ ("pca", PCA(res.best_params_["pca__n_components"])), 
-                ("rndft", ensemble.RandomForestClassifier(res.best_params_["rndft__n_estimators"]))])
+if GRIDSEARCH_ENABLE:
+#     pca_params = {"pca__n_components" : [10, 12, 15, 17]}
+    pca_params = {"pca__n_components" : [2, 5, 10, 15, 20]}
+    tree_params = {"tree__min_samples_split" : [2, 3, 5, 7, 10]}
+    rndft_params = {"rndft__n_estimators" : [2, 3, 5, 7, 15, 20]}
+    svc_params = {"svc__C" : [0.5, 1, 5, 10, 100]}
+    adabst_params = {"adabst__n_estimators" : [5, 10, 15, 20]}
+    
+    
+    tmpclf = Pipeline([ ("pca", PCA()), ("tree", tree.DecisionTreeClassifier())])
+    tmp = pca_params.copy()
+    tmp.update(tree_params)
+    res = GridSearchCV(tmpclf, tmp, scoring="f1", cv=100, iid= False)
+    print "decisionTree result"
+    res.fit(features_train, labels_train)
+    res.score(features_test, labels_test)
+    print res.best_score_
+    print res.best_params_
     BEST_SCORE = res.best_score_
-#test_classifier(res, my_dataset,feature_list)
-#test_classifier(res, my_dataset,feature_list)
-
-clf = Pipeline([ ("scale", preprocessing.MinMaxScaler()),("pca", PCA()), ("svc", LinearSVC())])
-tmp = pca_params.copy()
-tmp.update(svc_params)
-res = GridSearchCV(clf, tmp, scoring="f1")
-print "SVC result"
-res.fit(features_train, labels_train)
-res.score(features_test, labels_test)
-print res.best_score_
-if BEST_SCORE < res.best_score_:
-    clf = Pipeline([ ("pca", PCA(res.best_params_["pca__n_components"])), 
-                ("svc", LinearSVC(C=res.best_params_["svc__C"]))])
-    BEST_SCORE = res.best_score_
-
-
-clf = Pipeline([("pca", PCA()), ("adabst", ensemble.AdaBoostClassifier())])
-tmp = pca_params.copy()
-tmp.update(adabst_params)
-res = GridSearchCV(clf, tmp, scoring="f1")
-print "adaboost result"
-res.fit(features_train, labels_train)
-res.score(features_test, labels_test)
-print res.best_score_
-if BEST_SCORE < res.best_score_:
-    clf = Pipeline([ ("pca", PCA(res.best_params_["pca__n_components"])), 
-                ("adabst", ensemble.AdaBoostClassifier(res.best_params_["adabst__n_estimators"]))])
-    BEST_SCORE = res.best_score_
-
+    clf = Pipeline([ ("pca", PCA(n_components=res.best_params_["pca__n_components"])), \
+                    ("tree", tree.DecisionTreeClassifier(min_samples_split=res.best_params_["tree__min_samples_split"]))])
+    test_classifier(clf, my_dataset,feature_list)
+    
+    
+    cclf = Pipeline([("pca", PCA()), 
+                    ("rndft", ensemble.RandomForestClassifier())])
+    tmp = pca_params.copy()
+    tmp.update(rndft_params)
+    res = GridSearchCV(cclf, tmp, scoring="f1")
+    print "Random forest result"
+    res.fit(features_train, labels_train)
+    res.score(features_test, labels_test)
+    print res.best_score_
+    cclf = Pipeline([ ("pca", PCA(res.best_params_["pca__n_components"])), 
+                    ("rndft", ensemble.RandomForestClassifier(res.best_params_["rndft__n_estimators"]))])
+    test_classifier(cclf, my_dataset, feature_list)
+    if BEST_SCORE < res.best_score_:
+        clf = cclf
+        BEST_SCORE = res.best_score_
+    #test_classifier(res, my_dataset,feature_list)
+    #test_classifier(res, my_dataset,feature_list)
+    
+    cclf = Pipeline([ ("scale", preprocessing.MinMaxScaler()),("pca", PCA()), ("svc", LinearSVC())])
+    tmp = pca_params.copy()
+    tmp.update(svc_params)
+    res = GridSearchCV(cclf, tmp, scoring="f1")
+    print "SVC result"
+    res.fit(features_train, labels_train)
+    res.score(features_test, labels_test)
+    print res.best_score_
+    cclf = Pipeline([ ("pca", PCA(res.best_params_["pca__n_components"])), 
+                    ("svc", LinearSVC(C=res.best_params_["svc__C"]))])
+    test_classifier(cclf, my_dataset, feature_list)
+    if BEST_SCORE < res.best_score_:
+        clf = cclf
+        BEST_SCORE = res.best_score_
+    
+    
+    cclf = Pipeline([("pca", PCA()), ("adabst", ensemble.AdaBoostClassifier())])
+    tmp = pca_params.copy()
+    tmp.update(adabst_params)
+    res = GridSearchCV(cclf, tmp, scoring="f1")
+    print "adaboost result"
+    res.fit(features_train, labels_train)
+    res.score(features_test, labels_test)
+    print res.best_score_
+    cclf = Pipeline([ ("pca", PCA(n_components=res.best_params_["pca__n_components"])), 
+                    ("adabst", ensemble.AdaBoostClassifier(n_estimators=res.best_params_["adabst__n_estimators"]))])
+    test_classifier(cclf, my_dataset, feature_list)
+    if BEST_SCORE < res.best_score_:
+        clf = cclf
+        BEST_SCORE = res.best_score_
+else:
+    clf = Pipeline([ ("pca", PCA(n_components = 10)), 
+                    ("tree", tree.DecisionTreeClassifier(min_samples_split= 7))])
 ### Task 5: Tune your classifier to achieve better than .3 precision and recall 
 ### using our testing script.
 ### Because of the small size of the dataset, the script uses stratified
@@ -420,4 +256,4 @@ test_classifier(clf, my_dataset, feature_list)
 ### Dump your classifier, dataset, and features_list so 
 ### anyone can run/check your results.
 
-dump_classifier_and_data(clf, my_dataset, features_list)
+# dump_classifier_and_data(clf, my_dataset, features_list)
