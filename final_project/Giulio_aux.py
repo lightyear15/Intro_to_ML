@@ -5,6 +5,7 @@ import numpy as np
 from numpy import dtype
 import pandas as pd
 
+
 def dict2PDFrame (dictio, featureList):
     dframe = pd.DataFrame(index=dictio.keys(), columns=featureList)
     for k in dictio.keys():
@@ -40,8 +41,8 @@ def classifyEntries(data_frame, thre):
             person_classes["less3thre"] += 1
         else:
             person_classes["more3thre"] += 1  
-    print "employees count: "
-    print person_classes
+    print ("employees count: ")
+    print (person_classes)
     
 
 def removeClassEntries(data_frame, thre):
@@ -51,7 +52,7 @@ def removeClassEntries(data_frame, thre):
         ratio = float(person.count()) / float(len(person))
         if ratio < thre:
             toRemove.append(person_index)
-            print "removing " + person["full_name"] + " who is poi: " + str (person["poi"])
+            print ("removing " + person["full_name"] + " who is poi: " + str (person["poi"]))
     return data_frame.drop(toRemove, axis= 0)
 
 
@@ -67,8 +68,8 @@ def classifyFeatures(data_frame ,thre):
             feature_classes["less3thre"] += 1
         else:
             feature_classes["more3thre"] += 1
-    print "features count"
-    print feature_classes
+    print ("features count")
+    print (feature_classes)
 
 
 def removeClassFeatures(data_frame, thre):
@@ -77,7 +78,7 @@ def removeClassFeatures(data_frame, thre):
         ratio = float(data_frame[feature].count()) / float(len(data_frame[feature]))
         if ratio < thre:
             toRemove.append(feature)
-            print "removing " + feature
+            print ("removing " + feature)
     return data_frame.drop(toRemove, axis= 1)
 
 
@@ -103,8 +104,8 @@ def findOutliers(data_frame, base, feature_list):
                     outlier_list[name] = 1            
     for i in range(0, len(feature_list)+1):
         cc = sum(np.array(outlier_list.values()) == i)
-        print "outliers on " + str(i) + " features: " + str(cc)
-    print "total outliers: " + str(len(outlier_list.keys()))
+        print ("outliers on " + str(i) + " features: " + str(cc))
+    print ("total outliers: " + str(len(outlier_list.keys())))
 
 
 
@@ -137,9 +138,30 @@ def featureImportance(data_frame):
     dt.fit(X, Y)
     d = dict(zip(df.columns.values, dt.feature_importances_))
 #     for feature in d.keys():
-#         print feature + " importance: " + str(d[feature])
+#         print (feature + " importance: " + str(d[feature])
     return d
 
+# def auxFunctionForKBest():
+    
+
+from sklearn import feature_selection
+from sklearn.svm.classes import SVC
+from sklearn import cross_validation
+def findFeaturesToRemove(data_frame):
+    df = data_frame.fillna(0.0)
+    df.replace(np.inf, 0, inplace=True)
+    df.replace(-np.inf, 0, inplace=True)
+    df.drop(["full_name", "poi", "email_address"], axis=1, inplace=True)
+    X = np.array(df.values)
+    y = np.array(data_frame["poi"].values)
+    clf = SVC(kernel="linear")
+    cvObj = cross_validation.StratifiedKFold(y, shuffle=True, n_folds=10)
+    fsel = feature_selection.RFECV(clf, cv=cvObj, scoring="f1", verbose=1000)
+    fsel.fit(X, y)
+    print ("found features to remove:")
+    print (fsel.support_)
+    featuresToRemove = []
+    return featuresToRemove
 
 TEST_CYCLE = 50
 from sklearn import cross_validation
@@ -165,7 +187,7 @@ def removingFeaturePerformances(data_frame):
                 Y_train, Y_test = Y[train_index], Y[test_index]
                 dt.fit(X_train, Y_train)                
                 score += metrics.f1_score(list(Y_test), list(dt.predict(X_test)))
-        print "removing " + feature_toRemove + ", score: " + str(score)
+        print ("removing " + feature_toRemove + ", score: " + str(score))
         rank[feature_toRemove] = score
     return rank
     
@@ -193,7 +215,7 @@ def AddArtificialFeaturePerformance(data_frame):
     for f1 in range(0, len(feature_list)-1):
         for f2 in range(f1+1, len(feature_list)):
             important_feature = [feature_list[f1], feature_list[f2]]
-        #print important_feature
+        #print (important_feature
             tmp_frame = df.copy()
             for i in range(0, len(important_feature)):
                 ifeature = important_feature[i]
@@ -222,7 +244,7 @@ def AddArtificialFeaturePerformance(data_frame):
             rank[important_feature[0]] += score
             rank[important_feature[1]] += score
             for i in rank.keys():
-                print "feature: ", i, " score: ", rank[i] 
+                print ("feature: ", i, " score: ", rank[i])
     return rank
 
 
@@ -255,8 +277,8 @@ def findBestDictionary(data_frame):
     poi_ratio = float(data_frame["poi"].loc[data_frame["poi"]==True].count()) / float(data_frame["poi"].count())    
     for i in range(0,ATTEMPTS):
         if i % 10 == 0:
-            print "attempt " + str(i)
-        poi_person = data_frame.loc[data_frame["poi"]==True]    
+            print ("attempt " + str(i))
+        poi_person = data_frame.loc[data_frame["poi"]==True]
         rnd_poi_person = poi_person.loc[np.random.choice(poi_person.index, int(round(poi_ratio*PERSON_SUBSET)))]
         nonpoi_person = data_frame.loc[data_frame["poi"]==False]    
         rnd_nonpoi_person = nonpoi_person.loc[np.random.choice(nonpoi_person.index, int(round((1-poi_ratio)*PERSON_SUBSET)))]
@@ -289,7 +311,7 @@ def findBestDictionary(data_frame):
             idx += 1
     ord_dict = sorted(important_word_dict.items(), key=operator.itemgetter(1), reverse=True)
     for i in ord_dict:
-        print i[0] + " " + str(i[1])
+        print (i[0] + " " + str(i[1]))
     return important_word_dict
     
 
@@ -298,8 +320,12 @@ WORD_TO_REMOVE = ['7138536485', 'louis', 'joanni', 'sullivanhoueese', 'jeff',
                   'thomson', '2819487273', '8002626000', 'kellyjohnsonenroncom',
                   "0949", "134", "31769", "5034643735", "62602", "charlen", "georgeann",
                   "johnfowlersuncom", "kennethlayenroncom", "philipp",
-                  "taylorhouectect", "tim"]
-def findBestTenWords(dictio):
+                  "taylorhouectect", "tim", 'jeffskillingenroncom', 'andypst', 
+                  "gwhalleynsf", "jderricnsf", "rieker", "0844", "13002pst",
+                  "24", "2702pst", "506", "614", "7138535984", "75", "77002",
+                  "christoph", "dave", "ddelain2enroncom", "debra", "doug",
+                  "hannonenron", "jdasov", "steve"]
+def findBestWords(dictio):
     for w in WORD_TO_REMOVE:
         if w in dictio.keys():
             del dictio[w]
@@ -318,7 +344,7 @@ def removeWords(mail_data_frame):
 import multiprocessing
 from joblib import Parallel, delayed 
 def parallelAux(data_frame, name, dictio):
-    print name
+    print (name)
     person = EnronEmployee(name, data_frame)
     mails = person.vectorizeMails(dictio)
     vect_words = person.vectorizeMails(dictio)
